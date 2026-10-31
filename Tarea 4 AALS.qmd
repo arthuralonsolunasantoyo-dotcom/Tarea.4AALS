@@ -1,0 +1,870 @@
+---
+title: "Tarea 4. Distribuciones de probabilidad discretas"
+lang: es
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+---
+
+```{r}
+#| label: setup
+#| include: false
+library(ggplot2)
+library(knitr)
+set.seed(123)
+```
+
+# Introducción
+
+En esta tarea se estudian cinco distribuciones discretas: binomial negativa, geométrica, hipergeométrica, Poisson y uniforme discreta. Se utilizan sus funciones de probabilidad, medidas descriptivas, gráficas y simulaciones para comparar los resultados teóricos con los observados. También se verifica el Teorema Central del Límite (TCL).
+
+Los códigos se escribieron usando principalmente funciones base de R. Solo se necesitan los paquetes `ggplot2` y `knitr`.
+
+# 1. Distribución Binomial Negativa
+
+La distribución binomial negativa representa el número de fracasos que ocurren antes de obtener un número fijo de éxitos. Sus parámetros son `r`, el número de éxitos requeridos, y `p`, la probabilidad de éxito en cada ensayo.
+
+Si \(X\) sigue una distribución binomial negativa:
+
+\[
+P(X=x)=\binom{x+r-1}{x}p^r(1-p)^x,\quad x=0,1,2,\ldots
+\]
+
+Su media y varianza son:
+
+\[
+E(X)=\frac{r(1-p)}{p},\qquad
+Var(X)=\frac{r(1-p)}{p^2}
+\]
+
+En R se utiliza `dnbinom()` para la probabilidad, `pnbinom()` para la acumulada y `rnbinom()` para simular valores.
+
+## 1.1 Función y comparación con la suma de geométricas
+
+Se crea una función que recibe `r`, `p` y el número de simulaciones. Después se compara una muestra binomial negativa con la suma de `r` variables geométricas independientes. Ambas deben representar la misma distribución.
+
+```{r}
+# Función para generar una muestra binomial negativa
+simular_binomial_negativa <- function(r, p, n_sim) {
+  rnbinom(n_sim, size = r, prob = p)
+}
+
+# Parámetros
+r <- 4
+p <- 0.35
+n_sim <- 10000
+
+# Simulación binomial negativa
+set.seed(123)
+bn <- simular_binomial_negativa(r, p, n_sim)
+
+# Suma de r variables geométricas
+geom <- replicate(r, rgeom(n_sim, prob = p))
+suma_geom <- rowSums(geom)
+
+# Comparación de resultados
+tabla_bn <- data.frame(
+  Metodo = c("Binomial negativa", "Suma de geométricas"),
+  Media = c(mean(bn), mean(suma_geom)),
+  Varianza = c(var(bn), var(suma_geom))
+)
+
+kable(tabla_bn, digits = 4,
+      caption = "Comparación entre binomial negativa y suma de geométricas")
+```
+
+```{r}
+# Gráfica comparativa
+datos_bn <- data.frame(
+  valor = c(bn, suma_geom),
+  metodo = rep(c("Binomial negativa", "Suma de geométricas"),
+               each = n_sim)
+)
+
+ggplot(datos_bn, aes(x = valor, fill = metodo)) +
+  geom_histogram(aes(y = after_stat(density)),
+                 binwidth = 1, position = "identity", alpha = 0.5) +
+  labs(title = "Binomial negativa y suma de geométricas",
+       x = "Número de fracasos", y = "Densidad", fill = "Método") +
+  theme_minimal()
+```
+
+**Interpretación:** las medias, varianzas e histogramas deben ser parecidos. Las pequeñas diferencias se deben al azar de la simulación. Esto permite comprobar que la suma de `r` variables geométricas independientes con la misma probabilidad `p` sigue una binomial negativa con parámetros `r` y `p`.
+
+## 1.2 Teorema Central del Límite
+
+Se generan 1,000 muestras de tamaño 50 de una distribución binomial negativa. Para cada muestra se calcula su media y se compara la distribución de esas medias con una normal.
+
+```{r}
+# Parámetros
+r <- 4
+p <- 0.35
+k <- 1000
+n <- 50
+
+# Generar las medias muestrales
+set.seed(123)
+medias_bn <- replicate(k, mean(rnbinom(n, size = r, prob = p)))
+
+# Media y varianza teóricas de la variable original
+media_teorica <- r * (1 - p) / p
+var_teorica <- r * (1 - p) / p^2
+
+# Tabla de comparación
+tabla_tcl_bn <- data.frame(
+  Medida = c("Media", "Varianza de la media"),
+  Teorica = c(media_teorica, var_teorica / n),
+  Simulada = c(mean(medias_bn), var(medias_bn))
+)
+
+kable(tabla_tcl_bn, digits = 4,
+      caption = "Verificación del TCL para la binomial negativa")
+```
+
+```{r}
+ggplot(data.frame(medias_bn), aes(x = medias_bn)) +
+  geom_histogram(aes(y = after_stat(density)),
+                 bins = 30, fill = "skyblue", color = "white") +
+  stat_function(fun = dnorm,
+                args = list(mean = media_teorica,
+                            sd = sqrt(var_teorica / n)),
+                color = "red", linewidth = 1) +
+  geom_vline(xintercept = media_teorica,
+             linetype = "dashed", color = "blue") +
+  labs(title = "TCL: medias de la binomial negativa",
+       x = "Media muestral", y = "Densidad") +
+  theme_minimal()
+```
+
+**Interpretación:** al promediar muestras de tamaño 50, la distribución de las medias muestrales presenta una forma aproximadamente normal y se concentra alrededor de la media teórica. Su varianza es menor que la de los datos originales, pues corresponde a \(Var(X)/n\).
+
+# 2. Distribución Geométrica
+
+La distribución geométrica modela el número de fracasos antes de obtener el primer éxito. Su parámetro `p` es la probabilidad de éxito.
+
+\[
+P(X=x)=(1-p)^x p,\quad x=0,1,2,\ldots
+\]
+
+\[
+E(X)=\frac{1-p}{p},\qquad
+Var(X)=\frac{1-p}{p^2}
+\]
+
+En R se utilizan `dgeom()`, `pgeom()` y `rgeom()`.
+
+## 2.1 Máquina con probabilidad de defecto de 0.02
+
+Se considera que la probabilidad de que una pieza sea defectuosa es 0.02. Para este ejercicio, se toma como éxito encontrar una pieza defectuosa. La variable `X` cuenta las piezas no defectuosas antes de encontrar la primera defectuosa.
+
+```{r}
+p <- 0.02
+x <- 0:250
+
+# Función de probabilidad y acumulada
+prob <- dgeom(x, prob = p)
+acum <- pgeom(x, prob = p)
+
+datos_geo <- data.frame(x, prob, acum)
+
+# Media, varianza y desviación estándar
+media_geo <- (1 - p) / p
+var_geo <- (1 - p) / p^2
+sd_geo <- sqrt(var_geo)
+
+tabla_geo <- data.frame(
+  Medida = c("Media", "Varianza", "Desviación estándar"),
+  Valor = c(media_geo, var_geo, sd_geo)
+)
+
+kable(tabla_geo, digits = 4,
+      caption = "Parámetros de la distribución geométrica")
+```
+
+```{r}
+# Gráficas de probabilidad y acumulada
+graf1 <- ggplot(datos_geo[1:60, ], aes(x = x, y = prob)) +
+  geom_col(fill = "steelblue") +
+  labs(title = "Función de probabilidad",
+       x = "Piezas no defectuosas antes del defecto",
+       y = "Probabilidad") +
+  theme_minimal()
+
+graf2 <- ggplot(datos_geo[1:60, ], aes(x = x, y = acum)) +
+  geom_step(color = "firebrick", linewidth = 1) +
+  labs(title = "Función acumulada",
+       x = "Piezas no defectuosas antes del defecto",
+       y = "Probabilidad acumulada") +
+  theme_minimal()
+
+graf1
+graf2
+```
+
+### Simulación de 10,000 observaciones
+
+```{r}
+set.seed(123)
+n_sim <- 10000
+sim_geo <- rgeom(n_sim, prob = p)
+
+tabla_sim_geo <- data.frame(
+  Medida = c("Media", "Varianza", "Desviación estándar"),
+  Teorica = c(media_geo, var_geo, sd_geo),
+  Simulada = c(mean(sim_geo), var(sim_geo), sd(sim_geo))
+)
+
+kable(tabla_sim_geo, digits = 4,
+      caption = "Comparación teórica y simulada de la geométrica")
+```
+
+```{r}
+datos_sim_geo <- data.frame(valor = sim_geo)
+
+ggplot(datos_sim_geo, aes(x = valor)) +
+  geom_histogram(aes(y = after_stat(density)),
+                 binwidth = 5, fill = "skyblue", color = "white") +
+  labs(title = "Simulación de la distribución geométrica",
+       x = "Número de piezas", y = "Densidad") +
+  theme_minimal()
+```
+
+### Verificación de la propiedad de falta de memoria
+
+La propiedad indica que, si todavía no aparece un defecto después de cierto número de piezas, la probabilidad de esperar más piezas adicionales no cambia.
+
+```{r}
+s <- 10
+t <- 20
+
+# P(X > s + t | X > s)
+prob_condicional <- (1 - p)^(s + t + 1) / (1 - p)^(s + 1)
+
+# P(X > t)
+prob_directa <- (1 - p)^(t + 1)
+
+data.frame(
+  Probabilidad_condicional = prob_condicional,
+  Probabilidad_directa = prob_directa
+)
+```
+
+**Interpretación:** las dos probabilidades son iguales. Esto verifica la propiedad de falta de memoria de la distribución geométrica.
+
+## 2.2 Teorema Central del Límite
+
+Se generan 1,000 muestras de tamaño 50 con una distribución geométrica y se calcula la media de cada muestra.
+
+```{r}
+p <- 0.30
+k <- 1000
+n <- 50
+
+set.seed(123)
+medias_geo <- replicate(k, mean(rgeom(n, prob = p)))
+
+media_teorica <- (1 - p) / p
+var_teorica <- (1 - p) / p^2
+
+tabla_tcl_geo <- data.frame(
+  Medida = c("Media", "Varianza de la media"),
+  Teorica = c(media_teorica, var_teorica / n),
+  Simulada = c(mean(medias_geo), var(medias_geo))
+)
+
+kable(tabla_tcl_geo, digits = 4,
+      caption = "Verificación del TCL para la geométrica")
+```
+
+```{r}
+ggplot(data.frame(medias_geo), aes(x = medias_geo)) +
+  geom_histogram(aes(y = after_stat(density)),
+                 bins = 30, fill = "skyblue", color = "white") +
+  stat_function(fun = dnorm,
+                args = list(mean = media_teorica,
+                            sd = sqrt(var_teorica / n)),
+                color = "red", linewidth = 1) +
+  labs(title = "TCL: medias de la distribución geométrica",
+       x = "Media muestral", y = "Densidad") +
+  theme_minimal()
+```
+
+**Interpretación:** las medias muestrales se concentran alrededor de la media teórica y su distribución se aproxima a una normal. La aproximación mejora al utilizar muestras suficientemente grandes.
+
+# 3. Distribución Hipergeométrica
+
+La distribución hipergeométrica se utiliza cuando se extrae una muestra de una población finita **sin reemplazo**. Por ello, la probabilidad de obtener un éxito cambia después de cada extracción.
+
+Sean:
+
+- \(N\): tamaño total de la población.
+- \(K\): número de elementos considerados éxitos.
+- \(n\): tamaño de la muestra.
+- \(X\): número de éxitos encontrados en la muestra.
+
+Su función de probabilidad es:
+
+\[
+P(X=x)=\frac{\binom{K}{x}\binom{N-K}{n-x}}{\binom{N}{n}}
+\]
+
+Los valores posibles cumplen:
+
+\[
+\max(0,n-(N-K))\leq x\leq \min(n,K)
+\]
+
+La media y la varianza son:
+
+\[
+E(X)=n\frac{K}{N}
+\]
+
+\[
+Var(X)=n\frac{K}{N}\left(1-\frac{K}{N}\right)
+\frac{N-n}{N-1}
+\]
+
+En R se utilizan `dhyper()` para la probabilidad, `phyper()` para la acumulada y `rhyper()` para simular.
+
+## 3.1 Función de probabilidad y ejemplo
+
+Una fábrica tiene 100 piezas, de las cuales 30 son defectuosas y 70 no lo son. Se seleccionan 20 piezas sin reemplazo. La variable \(X\) representa el número de piezas defectuosas seleccionadas.
+
+```{r}
+# Parámetros
+N <- 100
+K <- 30
+n <- 20
+
+# Valores posibles de X
+x_min <- max(0, n - (N - K))
+x_max <- min(n, K)
+x <- x_min:x_max
+
+# Probabilidad y acumulada
+prob_hip <- dhyper(x, m = K, n = N - K, k = n)
+acum_hip <- phyper(x, m = K, n = N - K, k = n)
+
+datos_hip <- data.frame(x, prob_hip, acum_hip)
+
+kable(datos_hip, digits = 5,
+      col.names = c("Defectuosas", "Probabilidad", "Acumulada"),
+      caption = "Distribución hipergeométrica de las piezas")
+```
+
+## 3.2 Gráfica de la función de probabilidad
+
+```{r}
+ggplot(datos_hip, aes(x = x, y = prob_hip)) +
+  geom_col(fill = "steelblue", alpha = 0.8) +
+  labs(title = "Distribución hipergeométrica",
+       subtitle = "N = 100, K = 30, n = 20",
+       x = "Número de piezas defectuosas",
+       y = "Probabilidad") +
+  theme_minimal()
+```
+
+## 3.3 Efecto de los parámetros
+
+Se modifica el número de piezas defectuosas `K`, manteniendo constantes el tamaño de la población y el tamaño de la muestra. Después se modifica el tamaño de la muestra `n`.
+
+```{r}
+# Cambio en K
+valores_K <- c(10, 30, 50)
+datos_K <- do.call(rbind, lapply(valores_K, function(kk) {
+  xx <- 0:min(n, kk)
+  data.frame(
+    x = xx,
+    probabilidad = dhyper(xx, m = kk, n = N - kk, k = n),
+    K = paste("K =", kk)
+  )
+}))
+
+ggplot(datos_K, aes(x = x, y = probabilidad)) +
+  geom_col(fill = "steelblue") +
+  facet_wrap(~K, scales = "free_y") +
+  labs(title = "Efecto del número de éxitos K",
+       x = "Éxitos en la muestra", y = "Probabilidad") +
+  theme_minimal()
+
+# Cambio en el tamaño de muestra n
+valores_n <- c(10, 20, 30)
+datos_n <- do.call(rbind, lapply(valores_n, function(nn) {
+  xx <- max(0, nn - (N - K)):min(nn, K)
+  data.frame(
+    x = xx,
+    probabilidad = dhyper(xx, m = K, n = N - K, k = nn),
+    muestra = paste("n =", nn)
+  )
+}))
+
+ggplot(datos_n, aes(x = x, y = probabilidad)) +
+  geom_col(fill = "darkgreen") +
+  facet_wrap(~muestra, scales = "free_y") +
+  labs(title = "Efecto del tamaño de muestra n",
+       x = "Éxitos en la muestra", y = "Probabilidad") +
+  theme_minimal()
+```
+
+**Interpretación:** cuando aumenta `K`, hay más elementos exitosos en la población y el número esperado de éxitos en la muestra aumenta. Cuando aumenta `n`, se extraen más elementos y también aumenta el número esperado de éxitos. La forma de la distribución cambia de acuerdo con los parámetros.
+
+## 3.4 Media, varianza y desviación estándar
+
+```{r}
+p_hip <- K / N
+
+media_hip <- n * p_hip
+var_hip <- n * p_hip * (1 - p_hip) * ((N - n) / (N - 1))
+sd_hip <- sqrt(var_hip)
+
+tabla_param_hip <- data.frame(
+  Medida = c("Media", "Varianza", "Desviación estándar"),
+  Valor = c(media_hip, var_hip, sd_hip)
+)
+
+kable(tabla_param_hip, digits = 4,
+      caption = "Parámetros de la distribución hipergeométrica")
+```
+
+## 3.5 Simulación y comparación con la teoría
+
+```{r}
+set.seed(123)
+n_sim <- 10000
+
+sim_hip <- rhyper(n_sim, m = K, n = N - K, k = n)
+
+tabla_sim_hip <- data.frame(
+  Medida = c("Media", "Varianza", "Desviación estándar"),
+  Teorica = c(media_hip, var_hip, sd_hip),
+  Simulada = c(mean(sim_hip), var(sim_hip), sd(sim_hip))
+)
+
+kable(tabla_sim_hip, digits = 4,
+      caption = "Comparación teórica y simulada")
+```
+
+```{r}
+datos_sim_hip <- data.frame(
+  exitos = factor(sim_hip, levels = x)
+)
+
+ggplot(datos_sim_hip, aes(x = exitos)) +
+  geom_bar(fill = "steelblue") +
+  labs(title = "Simulación de la distribución hipergeométrica",
+       x = "Piezas defectuosas seleccionadas",
+       y = "Frecuencia") +
+  theme_minimal()
+```
+
+**Interpretación:** la media, varianza y desviación estándar simuladas deben aproximarse a sus valores teóricos. Las diferencias pequeñas son normales porque la simulación utiliza una cantidad finita de observaciones.
+
+## 3.6 Teorema Central del Límite
+
+Para verificar el TCL se generan 1,000 muestras independientes. Cada muestra contiene 20 extracciones sin reemplazo de la población descrita. Se calcula el número de defectuosas en cada muestra y, posteriormente, se forman grupos de 30 de esos resultados para obtener medias muestrales.
+
+```{r}
+# Parámetros
+N <- 100
+K <- 30
+n <- 20
+k <- 1000
+tam_grupo <- 30
+
+set.seed(123)
+
+# Conteos de defectuosas en muestras independientes
+conteos <- rhyper(k * tam_grupo, m = K, n = N - K, k = n)
+
+# Medias de grupos de 30 conteos
+medias_hip <- rowMeans(matrix(conteos, nrow = k,
+                              ncol = tam_grupo))
+
+# Media y varianza teóricas del conteo hipergeométrico
+media_hip <- n * K / N
+var_hip <- n * (K / N) * (1 - K / N) * ((N - n) / (N - 1))
+
+tabla_tcl_hip <- data.frame(
+  Medida = c("Media", "Varianza de la media"),
+  Teorica = c(media_hip, var_hip / tam_grupo),
+  Simulada = c(mean(medias_hip), var(medias_hip))
+)
+
+kable(tabla_tcl_hip, digits = 4,
+      caption = "Verificación del TCL para la hipergeométrica")
+```
+
+```{r}
+ggplot(data.frame(medias_hip), aes(x = medias_hip)) +
+  geom_histogram(aes(y = after_stat(density)),
+                 bins = 25, fill = "skyblue", color = "white") +
+  stat_function(fun = dnorm,
+                args = list(mean = media_hip,
+                            sd = sqrt(var_hip / tam_grupo)),
+                color = "red", linewidth = 1) +
+  labs(title = "TCL: medias de resultados hipergeométricos",
+       x = "Media muestral", y = "Densidad") +
+  theme_minimal()
+```
+
+**Interpretación:** las medias de los grupos se concentran alrededor de la media teórica y presentan una forma aproximadamente normal. La varianza teórica de esas medias es la varianza de la variable original dividida entre el tamaño del grupo.
+
+# 4. Distribución Poisson
+
+La distribución de Poisson modela el número de eventos que ocurren en un intervalo fijo cuando existe una tasa promedio constante y los eventos ocurren de manera independiente.
+
+\[
+P(X=x)=\frac{\lambda^x e^{-\lambda}}{x!}
+\]
+
+Su media y varianza son iguales a \(\lambda\):
+
+\[
+E(X)=\lambda,\qquad Var(X)=\lambda
+\]
+
+## 4.1 Verificación del Teorema Central del Límite con \(\lambda=7\)
+
+Se generan 1,000 muestras para cada tamaño de muestra. Se calcula la media de cada una y se compara con la distribución normal teórica.
+
+```{r}
+lambda <- 7
+k <- 1000
+tamanos <- c(5, 10, 30, 50)
+
+set.seed(123)
+
+resultados_poisson <- list()
+for (i in seq_along(tamanos)) {
+  n <- tamanos[i]
+  resultados_poisson[[i]] <- replicate(k, mean(rpois(n, lambda)))
+}
+
+# Tabla de resultados
+tabla_tcl_pois <- data.frame(
+  n = tamanos,
+  Media_teorica = lambda,
+  Media_simulada = sapply(resultados_poisson, mean),
+  Varianza_teorica = lambda / tamanos,
+  Varianza_simulada = sapply(resultados_poisson, var)
+)
+
+kable(tabla_tcl_pois, digits = 4,
+      caption = "Verificación del TCL para Poisson")
+```
+
+```{r}
+# Preparar datos para las gráficas
+datos_pois_tcl <- do.call(rbind, lapply(seq_along(tamanos), function(i) {
+  data.frame(
+    media = resultados_poisson[[i]],
+    n = paste("n =", tamanos[i])
+  )
+}))
+
+ggplot(datos_pois_tcl, aes(x = media)) +
+  geom_histogram(aes(y = after_stat(density)),
+                 bins = 25, fill = "skyblue", color = "white") +
+  facet_wrap(~n, scales = "free") +
+  labs(title = "TCL para la distribución Poisson",
+       x = "Media muestral", y = "Densidad") +
+  theme_minimal()
+```
+
+Para comparar cada histograma con su curva normal teórica correspondiente, se utiliza el siguiente código:
+
+```{r}
+for (i in seq_along(tamanos)) {
+  n <- tamanos[i]
+  datos <- data.frame(media = resultados_poisson[[i]])
+
+  grafico <- ggplot(datos, aes(x = media)) +
+    geom_histogram(aes(y = after_stat(density)),
+                   bins = 25, fill = "skyblue", color = "white") +
+    stat_function(fun = dnorm,
+                  args = list(mean = lambda,
+                              sd = sqrt(lambda / n)),
+                  color = "red", linewidth = 1) +
+    labs(title = paste("Poisson: medias muestrales, n =", n),
+         x = "Media muestral", y = "Densidad") +
+    theme_minimal()
+
+  print(grafico)
+}
+```
+
+**Interpretación:** conforme aumenta el tamaño de las muestras, la distribución de las medias muestrales se aproxima a una normal centrada en 7. Además, la varianza de las medias disminuye conforme aumenta `n`.
+
+## 4.2 Propiedad aditiva de Poisson
+
+Si dos variables Poisson son independientes, su suma también tiene distribución Poisson y su parámetro es la suma de los parámetros.
+
+\[
+X_1\sim Poisson(3.5),\quad X_2\sim Poisson(2.8)
+\]
+
+\[
+X_1+X_2\sim Poisson(6.3)
+\]
+
+```{r}
+set.seed(123)
+n_sim <- 10000
+
+x1 <- rpois(n_sim, 3.5)
+x2 <- rpois(n_sim, 2.8)
+suma <- x1 + x2
+
+# Simulación directa
+directa <- rpois(n_sim, 6.3)
+
+tabla_suma <- data.frame(
+  Metodo = c("Suma de dos Poisson", "Poisson directa"),
+  Media = c(mean(suma), mean(directa)),
+  Varianza = c(var(suma), var(directa))
+)
+
+kable(tabla_suma, digits = 4,
+      caption = "Verificación de la propiedad aditiva")
+```
+
+```{r}
+datos_suma <- data.frame(
+  valor = c(suma, directa),
+  metodo = rep(c("Suma", "Poisson directa"), each = n_sim)
+)
+
+ggplot(datos_suma, aes(x = valor, fill = metodo)) +
+  geom_histogram(binwidth = 1, position = "identity", alpha = 0.5) +
+  labs(title = "Suma de variables Poisson",
+       x = "Número de eventos", y = "Frecuencia",
+       fill = "Método") +
+  theme_minimal()
+```
+
+### Extensión a cuatro variables
+
+```{r}
+set.seed(123)
+
+lambdas <- c(1.5, 2, 2.5, 3)
+variables <- sapply(lambdas, function(valor) rpois(n_sim, valor))
+suma_cuatro <- rowSums(variables)
+directa_cuatro <- rpois(n_sim, sum(lambdas))
+
+tabla_cuatro <- data.frame(
+  Metodo = c("Suma de cuatro Poisson", "Poisson directa"),
+  Media = c(mean(suma_cuatro), mean(directa_cuatro)),
+  Varianza = c(var(suma_cuatro), var(directa_cuatro))
+)
+
+kable(tabla_cuatro, digits = 4,
+      caption = "Suma de cuatro variables Poisson")
+```
+
+**Interpretación:** tanto la suma de dos como la de cuatro variables presentan resultados similares a una Poisson directa cuyo parámetro es la suma de los parámetros individuales. Las diferencias observadas se deben a la simulación.
+
+## 4.3 Problema de inventarios
+
+Una tienda vende en promedio 8 unidades de un producto por día. La demanda diaria sigue una distribución Poisson con \(\lambda=8\).
+
+Se calcula la probabilidad de que la demanda supere el inventario disponible. Después se evalúan distintos niveles de inventario considerando:
+
+- Costo de mantener cada unidad sobrante: $2.
+- Costo por cada venta perdida: $15.
+- Costo de adquisición por unidad: $10.
+
+### a) Probabilidad de quedarse sin existencias con 12 unidades
+
+```{r}
+lambda <- 8
+inventario <- 12
+
+prob_agotarse <- 1 - ppois(inventario, lambda)
+
+cat("Probabilidad de agotar el inventario:",
+    round(prob_agotarse, 4), "\n")
+cat("Porcentaje:",
+    round(prob_agotarse * 100, 2), "%\n")
+```
+
+### b) Inventario para que la probabilidad de agotarse sea menor al 5%
+
+```{r}
+niveles <- 0:30
+prob_agotamiento <- 1 - ppois(niveles, lambda)
+
+resultado_b <- min(niveles[prob_agotamiento < 0.05])
+
+cat("Inventario mínimo necesario:", resultado_b, "unidades\n")
+cat("Probabilidad de agotamiento:",
+    round(1 - ppois(resultado_b, lambda), 4), "\n")
+```
+
+### c) y d) Costo esperado y nivel óptimo de inventario
+
+El costo total esperado se calcula sumando el costo de adquisición, el costo de las unidades que sobran y el costo de las ventas perdidas.
+
+Para cada nivel de inventario \(Q\):
+
+\[
+CT(Q)=10Q+2E[(Q-D)^+]+15E[(D-Q)^+]
+\]
+
+donde \(D\) es la demanda diaria y \(a^+=\max(a,0)\).
+
+```{r}
+lambda <- 8
+niveles <- 0:30
+demanda <- 0:60
+prob_demanda <- dpois(demanda, lambda)
+
+# Calcular los costos para cada inventario
+costo_total <- sapply(niveles, function(Q) {
+  sobrantes <- pmax(Q - demanda, 0)
+  ventas_perdidas <- pmax(demanda - Q, 0)
+
+  costo_compra <- 10 * Q
+  costo_mantenimiento <- 2 * sum(sobrantes * prob_demanda)
+  costo_perdidas <- 15 * sum(ventas_perdidas * prob_demanda)
+
+  costo_compra + costo_mantenimiento + costo_perdidas
+})
+
+tabla_costos <- data.frame(
+  Inventario = niveles,
+  Costo_total = costo_total
+)
+
+kable(tabla_costos, digits = 2,
+      caption = "Costo esperado para diferentes niveles de inventario")
+```
+
+```{r}
+inventario_optimo <- niveles[which.min(costo_total)]
+costo_minimo <- min(costo_total)
+
+cat("Inventario óptimo:", inventario_optimo, "unidades\n")
+cat("Costo mínimo esperado: $", round(costo_minimo, 2), "\n")
+```
+
+```{r}
+ggplot(tabla_costos, aes(x = Inventario, y = Costo_total)) +
+  geom_line(color = "steelblue", linewidth = 1) +
+  geom_point() +
+  geom_point(data = tabla_costos[which.min(tabla_costos$Costo_total), ],
+             color = "red", size = 3) +
+  labs(title = "Costo esperado según el inventario",
+       x = "Unidades en inventario", y = "Costo esperado ($)") +
+  theme_minimal()
+```
+
+**Interpretación:** el inventario óptimo es el nivel que presenta el menor costo total esperado. No necesariamente coincide con el inventario que reduce la probabilidad de agotamiento por debajo del 5%, porque también se consideran los costos de compra y almacenamiento.
+
+# 5. Distribución Uniforme Discreta
+
+La distribución uniforme discreta asigna la misma probabilidad a todos los valores posibles de una variable aleatoria.
+
+Si \(X\) puede tomar los valores \(0,1,\ldots,m\), entonces:
+
+\[
+P(X=x)=\frac{1}{m+1}
+\]
+
+La media y la varianza son:
+
+\[
+E(X)=\frac{m}{2},\qquad
+Var(X)=\frac{(m+1)^2-1}{12}
+\]
+
+## 5.1 Simular 500 observaciones en {0, 1, 2, 3, 4}
+
+```{r}
+set.seed(123)
+
+n_sim <- 500
+valores <- 0:4
+muestra <- sample(valores, n_sim, replace = TRUE)
+
+frecuencias <- table(factor(muestra, levels = valores))
+
+tabla_uniforme <- data.frame(
+  Valor = valores,
+  Probabilidad_teorica = rep(1 / length(valores), length(valores)),
+  Frecuencia_observada = as.numeric(frecuencias) / n_sim
+)
+
+kable(tabla_uniforme, digits = 4,
+      caption = "Frecuencias teóricas y observadas")
+```
+
+```{r}
+datos_uniforme <- data.frame(
+  Valor = valores,
+  Teorica = rep(1 / 5, 5),
+  Observada = as.numeric(frecuencias) / n_sim
+)
+
+ggplot(datos_uniforme, aes(x = factor(Valor))) +
+  geom_col(aes(y = Teorica), fill = "steelblue", alpha = 0.5) +
+  geom_point(aes(y = Observada), color = "red", size = 3) +
+  labs(title = "Uniforme discreta: teoría y simulación",
+       x = "Valor", y = "Probabilidad o frecuencia relativa") +
+  theme_minimal()
+```
+
+**Interpretación:** las frecuencias relativas observadas deben aproximarse a 0.20 para cada valor. No tienen que ser exactamente iguales debido al azar de la simulación.
+
+## 5.2 Teorema Central del Límite con {1, 2, ..., 10}
+
+Se generan 1,000 muestras de tamaño 50 de una distribución uniforme discreta entre 1 y 10. Se calcula la media de cada muestra.
+
+```{r}
+set.seed(123)
+
+k <- 1000
+n <- 50
+valores <- 1:10
+
+medias_uniforme <- replicate(k, {
+  mean(sample(valores, n, replace = TRUE))
+})
+
+# Parámetros teóricos
+media_uniforme <- mean(valores)
+var_uniforme <- mean((valores - media_uniforme)^2)
+
+tabla_tcl_uniforme <- data.frame(
+  Medida = c("Media", "Varianza de la media"),
+  Teorica = c(media_uniforme, var_uniforme / n),
+  Simulada = c(mean(medias_uniforme), var(medias_uniforme))
+)
+
+kable(tabla_tcl_uniforme, digits = 4,
+      caption = "Verificación del TCL para la uniforme discreta")
+```
+
+```{r}
+ggplot(data.frame(medias_uniforme), aes(x = medias_uniforme)) +
+  geom_histogram(aes(y = after_stat(density)),
+                 bins = 30, fill = "skyblue", color = "white") +
+  stat_function(fun = dnorm,
+                args = list(mean = media_uniforme,
+                            sd = sqrt(var_uniforme / n)),
+                color = "red", linewidth = 1) +
+  geom_vline(xintercept = media_uniforme,
+             color = "blue", linetype = "dashed") +
+  labs(title = "TCL: uniforme discreta de 1 a 10",
+       x = "Media muestral", y = "Densidad") +
+  theme_minimal()
+```
+
+**Interpretación:** el histograma de las medias muestrales tiene una forma aproximadamente normal y se concentra alrededor de 5.5, que es la media teórica. La varianza de las medias es aproximadamente la varianza original dividida entre 50.
+
+# Conclusión general
+
+Las simulaciones permitieron observar cómo se comportan las distribuciones binomial negativa, geométrica, hipergeométrica, Poisson y uniforme discreta. En general, los resultados simulados se aproximan a los valores teóricos de cada distribución. También se comprobó que el Teorema Central del Límite permite aproximar mediante una distribución normal el comportamiento de las medias muestrales cuando se utilizan muestras suficientemente grandes. Finalmente, los ejemplos muestran que cada distribución tiene aplicaciones diferentes, desde el control de calidad y la producción hasta el análisis de eventos e inventarios.
